@@ -1,170 +1,75 @@
-import { IConfig, IPlugin } from 'umi-types';
+// https://umijs.org/config/
+import { defineConfig } from 'umi';
+import { join } from 'path';
 
 import defaultSettings from './defaultSettings';
-// https://umijs.org/config/
-import slash from 'slash2';
-import webpackPlugin from './plugin.config';
+import proxy from './proxy';
+import routes from './routes';
 
-const { pwa, primaryColor } = defaultSettings;
+const { REACT_APP_ENV } = process.env;
 
-// preview.pro.ant.design only do not use in your production ;
-// preview.pro.ant.design 专用环境变量，请不要在你的项目中使用它。
-const { ANT_DESIGN_PRO_ONLY_DO_NOT_USE_IN_YOUR_PRODUCTION } = process.env;
-
-const isAntDesignProPreview = ANT_DESIGN_PRO_ONLY_DO_NOT_USE_IN_YOUR_PRODUCTION === 'site';
-
-const plugins: IPlugin[] = [
-  [
-    'umi-plugin-react',
-    {
-      antd: true,
-      dva: {
-        hmr: true,
-      },
-      locale: {
-        // default false
-        enable: true,
-        // default zh-CN
-        default: 'zh-CN',
-        // default true, when it is true, will use `navigator.language` overwrite default
-        baseNavigator: true,
-      },
-      dynamicImport: {
-        loadingComponent: './components/PageLoading/index',
-        webpackChunkName: true,
-        level: 3,
-      },
-      pwa: pwa
-        ? {
-            workboxPluginMode: 'InjectManifest',
-            workboxOptions: {
-              importWorkboxFrom: 'local',
-            },
-          }
-        : false,
-      // default close dll, because issue https://github.com/ant-design/ant-design-pro/issues/4665
-      // dll features https://webpack.js.org/plugins/dll-plugin/
-      // dll: {
-      //   include: ['dva', 'dva/router', 'dva/saga', 'dva/fetch'],
-      //   exclude: ['@babel/runtime', 'netlify-lambda'],
-      // },
-    },
-  ],
-  [
-    'umi-plugin-pro-block',
-    {
-      moveMock: false,
-      moveService: false,
-      modifyRequest: true,
-      autoAddMenu: true,
-    },
-  ],
-];
-
-// 针对 preview.pro.ant.design 的 GA 统计代码
-if (isAntDesignProPreview) {
-  plugins.push([
-    'umi-plugin-ga',
-    {
-      code: 'UA-72788897-6',
-    },
-  ]);
-  plugins.push([
-    'umi-plugin-pro',
-    {
-      serverUrl: 'https://ant-design-pro.netlify.com',
-    },
-  ]);
-}
-
-export default {
-  plugins,
-  block: {
-    defaultGitUrl: 'https://github.com/ant-design/pro-blocks',
-  },
+export default defineConfig({
   hash: true,
+  antd: {},
+  dva: {
+    hmr: true,
+  },
+  layout: {
+    // https://umijs.org/zh-CN/plugins/plugin-layout
+    locale: true,
+    siderWidth: 208,
+    ...defaultSettings,
+  },
+  // https://umijs.org/zh-CN/plugins/plugin-locale
+  locale: {
+    // default zh-CN
+    default: 'zh-CN',
+    antd: true,
+    // default true, when it is true, will use `navigator.language` overwrite default
+    baseNavigator: true,
+  },
+  dynamicImport: {
+    loading: '@ant-design/pro-layout/es/PageLoading',
+  },
   targets: {
     ie: 11,
   },
-  devtool: isAntDesignProPreview ? 'source-map' : false,
-  // umi routes: https://umijs.org/zh/guide/router.html
-  routes: [
-    {
-      path: '/',
-      component: '../layouts/BasicLayout',
-      Routes: ['src/pages/Authorized'],
-      authority: ['admin', 'user'],
-      routes: [
-        {
-          path: '/',
-          name: 'welcome',
-          icon: 'smile',
-          component: './Welcome',
-        },
-        {
-          component: './404',
-        },
-      ],
-    },
-    {
-      component: './404',
-    },
-  ],
+  // umi routes: https://umijs.org/docs/routing
+  routes,
   // Theme for antd: https://ant.design/docs/react/customize-theme-cn
   theme: {
-    'primary-color': primaryColor,
+    // 如果不想要 configProvide 动态设置主题需要把这个设置为 default
+    // 只有设置为 variable， 才能使用 configProvide 动态设置主色调
+    // https://ant.design/docs/react/customize-theme-variable-cn
+    'root-entry-name': 'variable',
   },
-  define: {
-    ANT_DESIGN_PRO_ONLY_DO_NOT_USE_IN_YOUR_PRODUCTION:
-      ANT_DESIGN_PRO_ONLY_DO_NOT_USE_IN_YOUR_PRODUCTION || '', // preview.pro.ant.design only do not use in your production ; preview.pro.ant.design 专用环境变量，请不要在你的项目中使用它。
-  },
+  // esbuild is father build tools
+  // https://umijs.org/plugins/plugin-esbuild
+  esbuild: {},
+  title: false,
   ignoreMomentLocale: true,
-  lessLoaderOptions: {
-    javascriptEnabled: true,
-  },
-  disableRedirectHoist: true,
-  cssLoaderOptions: {
-    modules: true,
-    getLocalIdent: (
-      context: {
-        resourcePath: string;
-      },
-      _: string,
-      localName: string,
-    ) => {
-      if (
-        context.resourcePath.includes('node_modules') ||
-        context.resourcePath.includes('ant.design.pro.less') ||
-        context.resourcePath.includes('global.less')
-      ) {
-        return localName;
-      }
-
-      const match = context.resourcePath.match(/src(.*)/);
-
-      if (match && match[1]) {
-        const antdProPath = match[1].replace('.less', '');
-        const arr = slash(antdProPath)
-          .split('/')
-          .map((a: string) => a.replace(/([A-Z])/g, '-$1'))
-          .map((a: string) => a.toLowerCase());
-        return `antd-pro${arr.join('-')}-${localName}`.replace(/--/g, '-');
-      }
-
-      return localName;
-    },
-  },
+  proxy: proxy[REACT_APP_ENV || 'dev'],
   manifest: {
     basePath: '/',
   },
-  chainWebpack: webpackPlugin,
-  /*
-  proxy: {
-    '/server/api/': {
-      target: 'https://preview.pro.ant.design/',
-      changeOrigin: true,
-      pathRewrite: { '^/server': '' },
+  // Fast Refresh 热更新
+  fastRefresh: {},
+  openAPI: [
+    {
+      requestLibPath: "import { request } from 'umi'",
+      // 或者使用在线的版本
+      // schemaPath: "https://gw.alipayobjects.com/os/antfincdn/M%24jrzTTYJN/oneapi.json"
+      schemaPath: join(__dirname, 'oneapi.json'),
+      mock: false,
     },
-  },
-  */
-} as IConfig;
+    {
+      requestLibPath: "import { request } from 'umi'",
+      schemaPath: 'https://gw.alipayobjects.com/os/antfincdn/CA1dOm%2631B/openapi.json',
+      projectName: 'swagger',
+    },
+  ],
+  nodeModulesTransform: { type: 'none' },
+  mfsu: {},
+  webpack5: {},
+  exportStatic: {},
+});
